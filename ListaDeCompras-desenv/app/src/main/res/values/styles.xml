@@ -1,0 +1,7 @@
+<resources>
+    <style name="CustomButton" parent="Widget.MaterialComponents.Button">
+        <item name="android:backgroundTint">#2EE4B3</item>
+        <item name="android:textColor">#FFFFFF</item>
+        <item name="cornerRadius">16dp</item>
+    </style>
+</resources>

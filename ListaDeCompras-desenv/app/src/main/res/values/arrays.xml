@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="unidades_array">
+        <item>un</item>
+        <item>kg</item>
+        <item>L</item>
+    </string-array>
+
+    <string-array name="categorias_array">
+        <item>Frutas</item>
+        <item>Verduras</item>
+        <item>Carnes</item>
+        <item>Bebidas</item>
+        <item>Padaria</item>
+        <item>Higiene</item>
+        <item>Limpeza</item>
+        <item>Outros</item>
+    </string-array>
+</resources>
