@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "409511264158",
+    "project_id": "listadecompras-e8380",
+    "storage_bucket": "listadecompras-e8380.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:409511264158:android:5ecd7f1d0787b6428d608f",
+        "android_client_info": {
+          "package_name": "io.github.henriquepavoni.projetoparcial"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAY96CvZeyzhkBmChtfSioolSxBYxJsP6g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:409511264158:android:2ee4ad7b7012f4e78d608f",
+        "android_client_info": {
+          "package_name": "ui.github.henriquepavoni.projetoparcial"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAY96CvZeyzhkBmChtfSioolSxBYxJsP6g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

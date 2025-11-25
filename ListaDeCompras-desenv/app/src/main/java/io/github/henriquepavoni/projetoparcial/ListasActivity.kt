@@ -17,6 +17,8 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.QueryDocumentSnapshot
 
 class ListasActivity : AppCompatActivity() {
 
@@ -25,14 +27,17 @@ class ListasActivity : AppCompatActivity() {
     private var listaSendoEditada: ListaCompra? = null
     private var dialogoEmExibicao: AlertDialog? = null
 
-    private val listas get() = Repository.listas
-    private val listasFiltradas = mutableListOf<ListaCompra>()
+    private lateinit var listasFiltradas: MutableList<ListaCompra>
     private lateinit var adapter: ListaAdapter
 
     private lateinit var etBuscar: EditText
     private lateinit var rvListas: RecyclerView
     private lateinit var fabAdd: FloatingActionButton
     private lateinit var btnLogout: Button
+
+    // Instância do Firestore
+    private val db = FirebaseFirestore.getInstance()
+    private val colecaoListas by lazy { db.collection("listas") }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,11 +54,12 @@ class ListasActivity : AppCompatActivity() {
         fabAdd = findViewById(R.id.fabAdd)
         btnLogout = findViewById(R.id.btnLogout)
 
+        listasFiltradas = mutableListOf()
         adapter = ListaAdapter(listasFiltradas)
         rvListas.layoutManager = LinearLayoutManager(this)
         rvListas.adapter = adapter
 
-        listasFiltradas.addAll(listas)
+        carregarListasDoFirestore()
 
         fabAdd.setOnClickListener {
             mostrarDialogo()
@@ -72,6 +78,28 @@ class ListasActivity : AppCompatActivity() {
             startActivity(intent)
             finish()
         }
+    }
+
+    private fun carregarListasDoFirestore() {
+        val usuario = Session.usuarioRegistrado ?: return
+        colecaoListas.whereEqualTo("usuarioEmail", usuario.email)
+            .get()
+            .addOnSuccessListener { documents ->
+                listasFiltradas.clear()
+                for (doc in documents) {
+                    val lista = ListaCompra(
+                        id = doc.id,
+                        titulo = doc.getString("titulo") ?: "",
+                        imagemUri = doc.getString("imagemUri")
+                    )
+                    listasFiltradas.add(lista)
+                }
+                listasFiltradas.sortBy { it.titulo.lowercase() }
+                adapter.notifyDataSetChanged()
+            }
+            .addOnFailureListener {
+                // Opcional: mostrar erro
+            }
     }
 
     private fun mostrarDialogo(listaExistente: ListaCompra? = null) {
@@ -114,14 +142,39 @@ class ListasActivity : AppCompatActivity() {
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             val titulo = etTitulo.text.toString().trim()
             if (titulo.isNotEmpty()) {
+                val usuario = Session.usuarioRegistrado ?: return@setOnClickListener
                 if (listaSendoEditada != null) {
-                    listaSendoEditada!!.titulo = titulo
-                    listaSendoEditada!!.imagemUri = uriImagemSelecionada
+                    // Editar lista existente
+                    val id = listaSendoEditada!!.id
+                    val dados = mapOf(
+                        "titulo" to titulo,
+                        "imagemUri" to uriImagemSelecionada,
+                        "usuarioEmail" to usuario.email
+                    )
+                    colecaoListas.document(id).set(dados)
+                        .addOnSuccessListener {
+                            listaSendoEditada!!.titulo = titulo
+                            listaSendoEditada!!.imagemUri = uriImagemSelecionada
+                            filtrarListas(etBuscar.text.toString())
+                        }
                 } else {
-                    listas.add(ListaCompra(titulo = titulo, imagemUri = uriImagemSelecionada))
+                    // Criar nova lista
+                    val dados = mapOf(
+                        "titulo" to titulo,
+                        "imagemUri" to uriImagemSelecionada,
+                        "usuarioEmail" to usuario.email
+                    )
+                    colecaoListas.add(dados)
+                        .addOnSuccessListener { docRef ->
+                            val novaLista = ListaCompra(
+                                id = docRef.id,
+                                titulo = titulo,
+                                imagemUri = uriImagemSelecionada
+                            )
+                            listasFiltradas.add(novaLista)
+                            filtrarListas(etBuscar.text.toString())
+                        }
                 }
-                listas.sortBy { it.titulo.lowercase() }
-                filtrarListas(etBuscar.text.toString())
                 dialog.dismiss()
             } else {
                 etTitulo.error = "Por favor, insira um título válido"
@@ -155,17 +208,16 @@ class ListasActivity : AppCompatActivity() {
     }
 
     private fun filtrarListas(texto: String) {
-        listasFiltradas.clear()
         val textoLower = texto.lowercase()
-        if (textoLower.isEmpty()) {
-            listasFiltradas.addAll(listas)
+        val listasFiltradasLocal = if (textoLower.isEmpty()) {
+            listasFiltradas
         } else {
-            listasFiltradas.addAll(listas.filter { it.titulo.lowercase().contains(textoLower) })
+            listasFiltradas.filter { it.titulo.lowercase().contains(textoLower) }
         }
-        adapter.notifyDataSetChanged()
+        adapter.updateList(listasFiltradasLocal)
     }
 
-    inner class ListaAdapter(private val listas: List<ListaCompra>) :
+    inner class ListaAdapter(private var listas: List<ListaCompra>) :
         RecyclerView.Adapter<ListaAdapter.ListaViewHolder>() {
 
         inner class ListaViewHolder(itemView: android.view.View) : RecyclerView.ViewHolder(itemView) {
@@ -203,9 +255,9 @@ class ListasActivity : AppCompatActivity() {
                     .setTitle("Excluir lista")
                     .setMessage("Deseja excluir \"${lista.titulo}\"?")
                     .setPositiveButton("Excluir") { _, _ ->
-                        Repository.itensPorLista.remove(lista.id)
-                        Repository.listas.removeIf { it.id == lista.id }
-                        filtrarListas(etBuscar.text.toString())
+                        colecaoListas.document(lista.id).delete()
+                        listasFiltradas.remove(lista)
+                        notifyDataSetChanged()
                     }
                     .setNegativeButton("Cancelar", null)
                     .show()
@@ -214,5 +266,10 @@ class ListasActivity : AppCompatActivity() {
         }
 
         override fun getItemCount(): Int = listas.size
+
+        fun updateList(novasListas: List<ListaCompra>) {
+            this.listas = novasListas
+            notifyDataSetChanged()
+        }
     }
 }

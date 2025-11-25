@@ -6,21 +6,14 @@ import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.CheckBox
-import android.widget.EditText
-import android.widget.ImageView
-import android.widget.TextView
-import android.widget.CompoundButton
-import android.widget.Button
-import android.widget.Spinner
-import android.widget.ArrayAdapter
-import android.widget.AdapterView
+import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.floatingactionbutton.FloatingActionButton
-import androidx.core.content.ContextCompat
+import com.google.firebase.firestore.FirebaseFirestore
 
 class DetalhesListaActivity : AppCompatActivity() {
 
@@ -34,6 +27,8 @@ class DetalhesListaActivity : AppCompatActivity() {
 
     private val itensFiltrados = mutableListOf<ItemCompra>()
     private lateinit var adapter: ItensAdapter
+
+    private val db = FirebaseFirestore.getInstance()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,7 +48,7 @@ class DetalhesListaActivity : AppCompatActivity() {
         adapter = ItensAdapter(itensFiltrados)
         rvItens.adapter = adapter
 
-        filtrarItens("")
+        carregarItensFirestore()
 
         etBuscarItens.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -78,13 +73,22 @@ class DetalhesListaActivity : AppCompatActivity() {
                 val categoriaSelecionada = parent.getItemAtPosition(position).toString()
                 filtrarItensPorCategoria(categoriaSelecionada)
             }
-
             override fun onNothingSelected(parent: AdapterView<*>) {}
         }
     }
 
-    private fun itensDaLista(): MutableList<ItemCompra> {
-        return Repository.itensPorLista.getOrPut(listaId) { mutableListOf() }
+    private fun carregarItensFirestore() {
+        db.collection("listas").document(listaId).collection("itens")
+            .get()
+            .addOnSuccessListener { result ->
+                itensFiltrados.clear()
+                for (doc in result) {
+                    val item = doc.toObject(ItemCompra::class.java)
+                    item.id = doc.id
+                    itensFiltrados.add(item)
+                }
+                adapter.notifyDataSetChanged()
+            }
     }
 
     private fun ordenar(items: List<ItemCompra>): List<ItemCompra> {
@@ -93,39 +97,34 @@ class DetalhesListaActivity : AppCompatActivity() {
                 .thenBy { it.nome.lowercase() }
         )
     }
+
     private fun filtrarItens(texto: String) {
-        val base = ordenar(itensDaLista())
+        val base = ordenar(itensFiltrados)
         val query = texto.lowercase()
+        val filtrados = if (query.isEmpty()) base else base.filter { it.nome.lowercase().contains(query) }
         itensFiltrados.clear()
-        if (query.isEmpty()) {
-            itensFiltrados.addAll(base)
-        } else {
-            itensFiltrados.addAll(base.filter { it.nome.lowercase().contains(query) })
-        }
+        itensFiltrados.addAll(filtrados)
         adapter.notifyDataSetChanged()
     }
 
     private fun filtrarItensPorCategoria(categoria: String) {
-        val base = ordenar(itensDaLista())
-        val itemsFiltrados = if (categoria.equals("Todos", ignoreCase = true)) {
+        val base = ordenar(itensFiltrados)
+        val filtrados = if (categoria.equals("Todos", ignoreCase = true)) {
             base
         } else {
             base.filter { it.categoria.equals(categoria, ignoreCase = true) }
         }
         itensFiltrados.clear()
-        itensFiltrados.addAll(itemsFiltrados)
+        itensFiltrados.addAll(filtrados)
         adapter.notifyDataSetChanged()
     }
-
 
     private fun mostrarDialogoItem(itemEditando: ItemCompra? = null) {
         val view = layoutInflater.inflate(R.layout.activity_dialog_item, null)
         val etNome = view.findViewById<EditText>(R.id.etNomeItem)
-
         val btnMenos = view.findViewById<Button>(R.id.btnMenos)
         val btnMais = view.findViewById<Button>(R.id.btnMais)
         val tvQtd = view.findViewById<TextView>(R.id.tvQuantidadeValor)
-
         val spUn = view.findViewById<Spinner>(R.id.spUnidade)
         val spCat = view.findViewById<Spinner>(R.id.spCategoria)
 
@@ -142,39 +141,20 @@ class DetalhesListaActivity : AppCompatActivity() {
         var qtdAtual = if (itemEditando != null) {
             val q = itemEditando.quantidade
             if (q < 1) 1 else kotlin.math.round(q).toInt()
-        } else {
-            1
-        }
+        } else 1
         tvQtd.text = qtdAtual.toString()
 
         if (itemEditando != null) {
             etNome.setText(itemEditando.nome)
-
-            val idxUn = (0 until adpUn.count).firstOrNull {
-                adpUn.getItem(it)?.toString().equals(itemEditando.unidade, ignoreCase = true)
-            } ?: 0
-            spUn.setSelection(idxUn)
-
-            val idxCat = (0 until adpCat.count).firstOrNull {
-                adpCat.getItem(it)?.toString().equals(itemEditando.categoria, ignoreCase = true)
-            } ?: adpCat.getPosition("Outros")
-            spCat.setSelection(idxCat)
+            spUn.setSelection((0 until adpUn.count).firstOrNull { adpUn.getItem(it)?.toString().equals(itemEditando.unidade, ignoreCase = true) } ?: 0)
+            spCat.setSelection((0 until adpCat.count).firstOrNull { adpCat.getItem(it)?.toString().equals(itemEditando.categoria, ignoreCase = true) } ?: 0)
         } else {
             spUn.setSelection(adpUn.getPosition("un").takeIf { it >= 0 } ?: 0)
             spCat.setSelection(adpCat.getPosition("Outros").takeIf { it >= 0 } ?: 0)
         }
 
-        btnMenos.setOnClickListener {
-            if (qtdAtual > 1) {
-                qtdAtual -= 1
-                tvQtd.text = qtdAtual.toString()
-            }
-        }
-
-        btnMais.setOnClickListener {
-            qtdAtual += 1
-            tvQtd.text = qtdAtual.toString()
-        }
+        btnMenos.setOnClickListener { if (qtdAtual > 1) tvQtd.text = (--qtdAtual).toString() }
+        btnMais.setOnClickListener { tvQtd.text = (++qtdAtual).toString() }
 
         val dialog = AlertDialog.Builder(this)
             .setTitle(if (itemEditando == null) "Adicionar item" else "Editar item")
@@ -194,25 +174,28 @@ class DetalhesListaActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            val lista = itensDaLista()
             if (itemEditando == null) {
-                lista.add(
-                    ItemCompra(
-                        listaId = listaId,
-                        nome = nome,
-                        quantidade = qtdAtual.toDouble(),
-                        unidade = un,
-                        categoria = cat
-                    )
-                )
+                val novoItem = ItemCompra(listaId = listaId, nome = nome, quantidade = qtdAtual.toDouble(), unidade = un, categoria = cat)
+                db.collection("listas").document(listaId).collection("itens")
+                    .add(novoItem)
+                    .addOnSuccessListener { docRef ->
+                        novoItem.id = docRef.id
+                        itensFiltrados.add(novoItem)
+                        filtrarItens(etBuscarItens.text.toString())
+                        dialog.dismiss()
+                    }
             } else {
                 itemEditando.nome = nome
                 itemEditando.quantidade = qtdAtual.toDouble()
                 itemEditando.unidade = un
                 itemEditando.categoria = cat
+                db.collection("listas").document(listaId).collection("itens").document(itemEditando.id)
+                    .set(itemEditando)
+                    .addOnSuccessListener {
+                        filtrarItens(etBuscarItens.text.toString())
+                        dialog.dismiss()
+                    }
             }
-            filtrarItens(etBuscarItens.text.toString())
-            dialog.dismiss()
         }
     }
 
@@ -254,31 +237,31 @@ class DetalhesListaActivity : AppCompatActivity() {
             h.tvNome.text = item.nome
             h.tvDetalhe.text = "${item.quantidade} ${item.unidade} • ${item.categoria}"
 
-            // Use itemView.context para obter o contexto correto
-            if (item.comprado) {
-                h.itemView.setBackgroundColor(ContextCompat.getColor(h.itemView.context, R.color.green_light))
-            } else {
-                h.itemView.setBackgroundColor(ContextCompat.getColor(h.itemView.context, R.color.white))
-            }
+            h.itemView.setBackgroundColor(
+                ContextCompat.getColor(h.itemView.context,
+                    if (item.comprado) R.color.green_light else R.color.white
+                )
+            )
 
             h.cb.setOnCheckedChangeListener(null)
             h.cb.isChecked = item.comprado
-            h.cb.setOnCheckedChangeListener { _: CompoundButton, checked: Boolean ->
+            h.cb.setOnCheckedChangeListener { _, checked ->
                 item.comprado = checked
-                filtrarItens(etBuscarItens.text.toString())
+                db.collection("listas").document(listaId).collection("itens").document(item.id)
+                    .set(item)
+                    .addOnSuccessListener { filtrarItens(etBuscarItens.text.toString()) }
             }
 
-            h.itemView.setOnLongClickListener { _: View ->
+            h.itemView.setOnLongClickListener {
                 AlertDialog.Builder(this@DetalhesListaActivity)
                     .setTitle(item.nome)
-                    .setItems(arrayOf("Editar", "Excluir")) { _, which: Int ->
+                    .setItems(arrayOf("Editar", "Excluir")) { _, which ->
                         when (which) {
                             0 -> mostrarDialogoItem(item)
                             1 -> {
-                                val base = itensDaLista()
-                                val idx = base.indexOfFirst { x: ItemCompra -> x.id == item.id }
-                                if (idx >= 0) base.removeAt(idx)
-                                filtrarItens(etBuscarItens.text.toString())
+                                db.collection("listas").document(listaId).collection("itens").document(item.id)
+                                    .delete()
+                                    .addOnSuccessListener { itensFiltrados.remove(item); filtrarItens(etBuscarItens.text.toString()) }
                             }
                         }
                     }.show()

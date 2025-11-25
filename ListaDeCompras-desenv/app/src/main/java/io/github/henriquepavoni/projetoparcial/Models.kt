@@ -3,18 +3,18 @@ package io.github.henriquepavoni.projetoparcial
 import java.util.UUID
 
 data class ListaCompra(
-    val id: String = UUID.randomUUID().toString(),
-    var titulo: String,
+    var id: String = UUID.randomUUID().toString(),
+    var titulo: String = "",
     var imagemUri: String? = null
 )
 
 data class ItemCompra(
-    val id: String = UUID.randomUUID().toString(),
-    val listaId: String,
-    var nome: String,
-    var quantidade: Double,
-    var unidade: String,
-    var categoria: String,
+    var id: String = "",
+    var listaId: String = "",
+    var nome: String = "",
+    var quantidade: Double = 1.0,
+    var unidade: String = "un",
+    var categoria: String = "Outros",
     var comprado: Boolean = false
 )
 

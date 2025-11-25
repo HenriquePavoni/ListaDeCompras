@@ -6,10 +6,14 @@ import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatButton
+import com.google.firebase.firestore.FirebaseFirestore
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
 class CriarContaActivity : AppCompatActivity() {
+
+    private val db = FirebaseFirestore.getInstance()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_create_account)
@@ -33,17 +37,25 @@ class CriarContaActivity : AppCompatActivity() {
             } else if (!isValidEmail(emailText)) {
                 Toast.makeText(this, "O email não é valido", Toast.LENGTH_SHORT).show()
             } else {
-                val novoUsuario = Usuario(
-                    nome = nomeText,
-                    email = emailText,
-                    senha = passwordText
-                )
-                Session.usuarioRegistrado = novoUsuario
-                Toast.makeText(this, "Conta criada! Faça login.", Toast.LENGTH_SHORT).show()
 
-                val intent = Intent(this, MainActivity::class.java)
-                startActivity(intent)
-                finish()
+                val novoUsuario = hashMapOf(
+                    "nome" to nomeText,
+                    "email" to emailText,
+                    "senha" to passwordText
+                )
+
+                db.collection("usuarios")
+                    .add(novoUsuario)
+                    .addOnSuccessListener {
+                        Toast.makeText(this, "Conta criada com sucesso!", Toast.LENGTH_SHORT).show()
+
+                        val intent = Intent(this, MainActivity::class.java)
+                        startActivity(intent)
+                        finish()
+                    }
+                    .addOnFailureListener { e ->
+                        Toast.makeText(this, "Erro ao salvar: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
             }
         }
     }
