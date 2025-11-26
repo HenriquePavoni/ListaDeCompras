@@ -25,6 +25,7 @@ class DetalhesListaActivity : AppCompatActivity() {
     private lateinit var rvItens: RecyclerView
     private lateinit var fabAddItem: FloatingActionButton
 
+    private val itensOriginais = mutableListOf<ItemCompra>()
     private val itensFiltrados = mutableListOf<ItemCompra>()
     private lateinit var adapter: ItensAdapter
 
@@ -54,13 +55,11 @@ class DetalhesListaActivity : AppCompatActivity() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun afterTextChanged(s: Editable?) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                filtrarItens(s?.toString().orEmpty())
+                aplicarFiltroGeral()
             }
         })
 
-        fabAddItem.setOnClickListener {
-            mostrarDialogoItem()
-        }
+        fabAddItem.setOnClickListener { mostrarDialogoItem() }
 
         val spFiltroCategoria = findViewById<Spinner>(R.id.spFiltroCategoria)
         val adpCat = ArrayAdapter.createFromResource(
@@ -70,8 +69,7 @@ class DetalhesListaActivity : AppCompatActivity() {
 
         spFiltroCategoria.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
-                val categoriaSelecionada = parent.getItemAtPosition(position).toString()
-                filtrarItensPorCategoria(categoriaSelecionada)
+                aplicarFiltroGeral()
             }
             override fun onNothingSelected(parent: AdapterView<*>) {}
         }
@@ -81,13 +79,13 @@ class DetalhesListaActivity : AppCompatActivity() {
         db.collection("listas").document(listaId).collection("itens")
             .get()
             .addOnSuccessListener { result ->
-                itensFiltrados.clear()
+                itensOriginais.clear()
                 for (doc in result) {
                     val item = doc.toObject(ItemCompra::class.java)
                     item.id = doc.id
-                    itensFiltrados.add(item)
+                    itensOriginais.add(item)
                 }
-                adapter.notifyDataSetChanged()
+                aplicarFiltroGeral()
             }
     }
 
@@ -98,24 +96,22 @@ class DetalhesListaActivity : AppCompatActivity() {
         )
     }
 
-    private fun filtrarItens(texto: String) {
-        val base = ordenar(itensFiltrados)
-        val query = texto.lowercase()
-        val filtrados = if (query.isEmpty()) base else base.filter { it.nome.lowercase().contains(query) }
-        itensFiltrados.clear()
-        itensFiltrados.addAll(filtrados)
-        adapter.notifyDataSetChanged()
-    }
+    private fun aplicarFiltroGeral() {
+        val texto = etBuscarItens.text.toString().lowercase()
+        val categoria = findViewById<Spinner>(R.id.spFiltroCategoria).selectedItem.toString()
 
-    private fun filtrarItensPorCategoria(categoria: String) {
-        val base = ordenar(itensFiltrados)
-        val filtrados = if (categoria.equals("Todos", ignoreCase = true)) {
-            base
-        } else {
-            base.filter { it.categoria.equals(categoria, ignoreCase = true) }
+        var lista = ordenar(itensOriginais)
+
+        if (categoria != "Todos") {
+            lista = lista.filter { it.categoria.equals(categoria, ignoreCase = true) }
         }
+
+        if (texto.isNotEmpty()) {
+            lista = lista.filter { it.nome.lowercase().contains(texto) }
+        }
+
         itensFiltrados.clear()
-        itensFiltrados.addAll(filtrados)
+        itensFiltrados.addAll(lista)
         adapter.notifyDataSetChanged()
     }
 
@@ -180,8 +176,8 @@ class DetalhesListaActivity : AppCompatActivity() {
                     .add(novoItem)
                     .addOnSuccessListener { docRef ->
                         novoItem.id = docRef.id
-                        itensFiltrados.add(novoItem)
-                        filtrarItens(etBuscarItens.text.toString())
+                        itensOriginais.add(novoItem)
+                        aplicarFiltroGeral()
                         dialog.dismiss()
                     }
             } else {
@@ -192,7 +188,7 @@ class DetalhesListaActivity : AppCompatActivity() {
                 db.collection("listas").document(listaId).collection("itens").document(itemEditando.id)
                     .set(itemEditando)
                     .addOnSuccessListener {
-                        filtrarItens(etBuscarItens.text.toString())
+                        aplicarFiltroGeral()
                         dialog.dismiss()
                     }
             }
@@ -249,7 +245,7 @@ class DetalhesListaActivity : AppCompatActivity() {
                 item.comprado = checked
                 db.collection("listas").document(listaId).collection("itens").document(item.id)
                     .set(item)
-                    .addOnSuccessListener { filtrarItens(etBuscarItens.text.toString()) }
+                    .addOnSuccessListener { aplicarFiltroGeral() }
             }
 
             h.itemView.setOnLongClickListener {
@@ -261,7 +257,10 @@ class DetalhesListaActivity : AppCompatActivity() {
                             1 -> {
                                 db.collection("listas").document(listaId).collection("itens").document(item.id)
                                     .delete()
-                                    .addOnSuccessListener { itensFiltrados.remove(item); filtrarItens(etBuscarItens.text.toString()) }
+                                    .addOnSuccessListener {
+                                        itensOriginais.remove(item)
+                                        aplicarFiltroGeral()
+                                    }
                             }
                         }
                     }.show()
